@@ -1,0 +1,13 @@
+{
+  "name": "Network Speed Monitor",
+  "description": "Displays the current network speed on the top bar.",
+  "uuid": "netspeed-monitor@gandalf",
+  "shell-version": [
+    "3.36",
+    "3.38",
+    "40",
+    "44"
+  ],
+  "url": "https://github.com/gandalf-the-lonesome/netspeed-monitor",
+  "version": 1.0
+}
