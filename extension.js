@@ -1,98 +1,165 @@
-const { St, Clutter } = imports.gi;
-const Main = imports.ui.main;
+'use strict';
 
-const ExtensionUtils = imports.misc.extensionUtils;
-const Me = ExtensionUtils.getCurrentExtension();
+// Import required GNOME Shell libraries
+import GObject from 'gi://GObject';
+import St from 'gi://St';
+import GLib from 'gi://GLib';
+import Clutter from 'gi://Clutter';
+import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-const GLib = imports.gi.GLib;
-const ByteArray = imports.byteArray;
+// Configuration constants
+const UPDATE_INTERVAL_SECONDS = 3;
+const NETWORK_INTERFACES_TO_IGNORE = ['lo', 'vir', 'vbox', 'docker', 'br-'];
 
-const refreshInterval = 3;
+/**
+ * NetworkSpeedIndicator class - Displays network upload and download speeds
+ * in the GNOME Shell panel
+ */
+const NetworkSpeedIndicator = GObject.registerClass(
+  class NetworkSpeedIndicator extends St.Label {
+    _init() {
+      // Initialize the label with default styling and text
+      super._init({
+        style_class: 'network-speed-label',
+        y_align: Clutter.ActorAlign.CENTER,
+        text: '↓ 0 B/s ↑ 0 B/s'
+      });
 
-let textDisplay;
-let lastTotalRxBytes = 0;
-let lastTotalTxBytes = 0;
+      // Initialize state variables
+      this._previousRxBytes = 0;
+      this._previousTxBytes = 0;
+      this._updateTimer = null;
+    }
 
-function init() {
-  textDisplay = new St.Label({
-    style_class: 'network-speed-label',
-    "y_align": Clutter.ActorAlign.CENTER,
-    text: '↓ 0 ↑ 0',
-  });
-}
+    /**
+     * Converts bytes per second to human-readable format
+     * @param {number} bytes - Bytes per second to format
+     * @returns {string} Formatted speed string
+     */
+    _formatSpeedValue(bytes) {
+      const units = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+      let unitIndex = 0;
+      let speed = bytes;
+      
+      // Convert to appropriate unit
+      while (speed >= 1024 && unitIndex < units.length - 1) {
+        speed /= 1024;
+        unitIndex++;
+      }
+      
+      return `${speed.toFixed(1)} ${units[unitIndex]}`;
+    }
 
-function enable() {
-  Main.panel._rightBox.insert_child_at_index(textDisplay, 0);
+    /**
+     * Checks if a network interface should be excluded from calculations
+     * @param {string} interfaceName - Name of the network interface
+     * @returns {boolean} True if interface should be ignored
+     */
+    _isIgnoredInterface(interfaceName) {
+      return NETWORK_INTERFACES_TO_IGNORE.some(prefix => 
+        interfaceName.startsWith(prefix)
+      );
+    }
 
-  updateNetworkSpeed();
-}
+    /**
+     * Updates the network speed display
+     * @returns {boolean} Always returns true to keep the update timer running
+     */
+    _updateSpeed() {
+      try {
+        // Read network statistics from /proc/net/dev
+        const [success, output] = GLib.spawn_command_line_sync('cat /proc/net/dev');
+        if (!success) return GLib.SOURCE_CONTINUE;
 
-function disable() {
-  Main.panel._rightBox.remove_child(textDisplay);
-}
+        // Parse network statistics
+        const lines = new TextDecoder().decode(output).split('\n');
+        let totalRxBytes = 0;
+        let totalTxBytes = 0;
 
-function updateNetworkSpeed() {
-  let [success, output] = GLib.spawn_command_line_sync('cat /proc/net/dev');
-  if (success) {
-    let lines = ByteArray.toString(output).split('\n');
+        // Process each interface's data (skip header lines)
+        for (const line of lines.slice(2)) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
 
-    let totalRxBytes = 0;
-    let totalTxBytes = 0;
+          const [iface, data] = trimmed.split(':');
+          if (!data || this._isIgnoredInterface(iface)) continue;
 
-    for (let i = 2; i < lines.length; i++) {
-      let line = lines[i].trim();
-      if (line.length === 0) continue;
+          // Extract rx and tx bytes from statistics
+          const [rxBytes, , , , , , , , txBytes] = data.trim()
+            .split(/\s+/)
+            .map(n => parseInt(n, 10));
+            
+          totalRxBytes += rxBytes;
+          totalTxBytes += txBytes;
+        }
 
-      let parts = line.split(':');
-      if (parts.length !== 2) continue;
+        // Initialize previous values if first run
+        this._previousRxBytes ||= totalRxBytes;
+        this._previousTxBytes ||= totalTxBytes;
 
-      let interfaceName = parts[0].trim();
-      if (
-        interfaceName.startsWith('lo') || // Skip loopback interface
-        interfaceName.startsWith('vir') || // Skip virtual interfaces
-        interfaceName.startsWith('vbox') // Skip VirtualBox interfaces (adjust as needed)
-      ) {
-        continue;
+        // Calculate current speeds
+        const downloadSpeed = this._formatSpeedValue(
+          (totalRxBytes - this._previousRxBytes) / UPDATE_INTERVAL_SECONDS
+        );
+        const uploadSpeed = this._formatSpeedValue(
+          (totalTxBytes - this._previousTxBytes) / UPDATE_INTERVAL_SECONDS
+        );
+
+        // Update the display
+        this.text = `↓ ${downloadSpeed} ↑ ${uploadSpeed}`;
+        
+        // Store current values for next update
+        this._previousRxBytes = totalRxBytes;
+        this._previousTxBytes = totalTxBytes;
+      } catch (error) {
+        console.error('NetworkSpeed:', error);
       }
 
-      let data = parts[1].trim().split(/\s+/);
-      let rxBytes = parseInt(data[0]);
-      let txBytes = parseInt(data[8]);
-
-      totalRxBytes += rxBytes;
-      totalTxBytes += txBytes;
-
+      return GLib.SOURCE_CONTINUE;
     }
 
-    if (lastTotalRxBytes == 0) {
-      lastTotalRxBytes = totalRxBytes;
+    /**
+     * Starts periodic updates of the network speed display
+     */
+    startUpdate() {
+      this._updateSpeed();
+      this._updateTimer = GLib.timeout_add_seconds(
+        GLib.PRIORITY_DEFAULT,
+        UPDATE_INTERVAL_SECONDS,
+        this._updateSpeed.bind(this)
+      );
     }
-    if (lastTotalTxBytes == 0) {
-      lastTotalTxBytes = totalTxBytes;
+
+    /**
+     * Stops periodic updates of the network speed display
+     */
+    stopUpdate() {
+      if (this._updateTimer) {
+        GLib.source_remove(this._updateTimer);
+        this._updateTimer = null;
+      }
     }
-
-    let rxSpeed = formatNetworkSpeed((totalRxBytes - lastTotalRxBytes) / refreshInterval);
-    let txSpeed = formatNetworkSpeed((totalTxBytes - lastTotalTxBytes) / refreshInterval);
-
-    textDisplay.text = `↓ ${rxSpeed}  ↑ ${txSpeed}`;
-
-    lastTotalRxBytes = totalRxBytes;
-    lastTotalTxBytes = totalTxBytes;
-
   }
+);
 
-  // Update every 'refreshInterval' seconds (adjust the interval as needed)
-  GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, refreshInterval, updateNetworkSpeed);
-}
+/**
+ * Main extension class that handles initialization and cleanup
+ */
+export default class NetworkSpeedExtension extends Extension {
+    enable() {
+      // Create and add the indicator to the panel
+      this._indicator = new NetworkSpeedIndicator();
+      Main.panel._rightBox.insert_child_at_index(this._indicator, 0);
+      this._indicator.startUpdate();
+    }
 
-function formatNetworkSpeed(bytes) {
-  const suffixes = ['B/s', 'KB/s', 'MB/s', 'GB/s'];
-  let index = 0;
-
-  while (bytes >= 1024 && index < suffixes.length - 1) {
-    bytes /= 1024;
-    index++;
-  }
-
-  return `${bytes.toFixed(2)} ${suffixes[index]}`;
+    disable() {
+      // Clean up when the extension is disabled
+      if (this._indicator) {
+        this._indicator.stopUpdate();
+        this._indicator.destroy();
+        this._indicator = null;
+      }
+    }
 }
