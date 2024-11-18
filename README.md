@@ -40,7 +40,7 @@ To install the Network Speed Monitor extension:
 Once installed and enabled, the Network Speed Monitor extension will display the current download (↓) and upload (↑) speeds on the top bar of your Ubuntu desktop. The speeds are updated every few seconds based on the configured refresh interval.
 
 ## ScreenShot
-![alt text](image.png)
+![alt text](screenshots/screenshot1.png)
 
 ## Technical Details: Network Speed Calculations
 
