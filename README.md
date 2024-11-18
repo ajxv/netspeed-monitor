@@ -42,6 +42,45 @@ Once installed and enabled, the Network Speed Monitor extension will display the
 ## ScreenShot
 ![alt text](image.png)
 
+## Technical Details: Network Speed Calculations
+
+### Data Source
+The extension reads network statistics from `/proc/net/dev`, a Linux kernel interface that provides cumulative network traffic statistics. This file contains rows for each network interface with various counters including bytes received (RX) and transmitted (TX).
+
+### Speed Calculation Process
+1. **Data Collection**
+   - The system reads `/proc/net/dev` every 3 seconds
+   - Interface statistics are aggregated, excluding virtual interfaces (lo, vir, vbox, docker, br-)
+   - Two primary values are tracked:
+     - Total bytes received (RX)
+     - Total bytes transmitted (TX)
+
+2. **Speed Calculation Formula**
+   ```sh
+   - Speed = (Current Bytes - Previous Bytes) / Interval Time
+   - RX Speed = (Current RX Bytes - Previous RX Bytes) / 3 seconds
+   - TX Speed = (Current TX Bytes - Previous TX Bytes) / 3 seconds
+   ```
+
+3. **Unit Conversion**
+   The raw byte values are converted to human-readable formats using the following scale:
+   - B/s  (Bytes/second)      : < 1024 B/s
+   - KB/s (Kilobytes/second)  : < 1024 KB/s
+   - MB/s (Megabytes/second)  : < 1024 MB/s
+   - GB/s (Gigabytes/second)  : ≥ 1024 MB/s
+
+### Implementation Details
+- Update Interval: 3 seconds (configurable via `UPDATE_INTERVAL_SECONDS`)
+- Interface Filtering: Uses prefix matching to exclude virtual interfaces
+- Error Handling: Continues operation even if a single reading fails
+- Memory Usage: Maintains only previous reading state (2 integers)
+- Display Format: "↓ {download_speed} ↑ {upload_speed}"
+
+### Resource Usage
+- CPU Impact: Minimal (reads one file every 3 seconds)
+- Memory Footprint: Constant (independent of network activity)
+- I/O Operations: One file read per update interval
+
 ## Contributing
 
 Contributions are welcome to the Network Speed Monitor extension! To contribute, follow these steps:
