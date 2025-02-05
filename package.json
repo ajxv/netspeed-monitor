@@ -1,6 +1,6 @@
 {
   "name": "netspeed-monitor",
-  "version": "2.1.0",
+  "version": "2.0.2",
   "description": "Ubuntu extension to display the current network speed on the top bar.",
   "main": "extension.js",
   "scripts": {
