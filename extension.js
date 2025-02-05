@@ -20,7 +20,7 @@ const NetworkSpeedIndicator = GObject.registerClass(
     // Constructor to initialize the label and set initial values
     _init() {
       super._init({
-        style_class: 'network-speed-label', // CSS class for styling
+        style_class: 'panel-button', // default panel-button CSS class for styling
         y_align: Clutter.ActorAlign.CENTER, // Vertically center the label
         text: '↓ 0 B/s ↑ 0 B/s' // Initial text
       });
