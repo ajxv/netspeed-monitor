@@ -1,4 +1,5 @@
 # Network Speed Monitor
+[![Install on GNOME Extensions](https://img.shields.io/badge/Install%20on-GNOME%20Extensions-brightgreen?logo=gnome&style=flat-square)](https://extensions.gnome.org/extension/7565/network-speed-monitor/)
 
 Network Speed Monitor is a GNOME extension that displays the current network speed on the top bar of your Ubuntu desktop. It provides a real-time view of your download and upload speeds, helping you monitor your network usage efficiently.
 
