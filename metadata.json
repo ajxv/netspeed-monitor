@@ -3,8 +3,9 @@
   "description": "Displays the current network speed on the top bar.",
   "uuid": "netspeed-monitor@ajxv",
   "shell-version": [
-    "46"
+    "45", "46", "47"
   ],
   "url": "https://github.com/ajxv/netspeed-monitor",
-  "version": 4
+  "version": 5,
+  "settings-schema": "org.gnome.shell.extensions.netspeed-monitor" 
 }

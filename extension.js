@@ -6,6 +6,7 @@ import St from 'gi://St';
 import GLib from 'gi://GLib';
 import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
+
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
@@ -18,19 +19,30 @@ const PROC_NET_DEV_PATH = '/proc/net/dev';
 const NetworkSpeedIndicator = GObject.registerClass(
   class NetworkSpeedIndicator extends St.Label {
     // Constructor to initialize the label and set initial values
-    _init() {
+    _init(settings) {
       super._init({
         style_class: 'panel-button', // default panel-button CSS class for styling
         y_align: Clutter.ActorAlign.CENTER, // Vertically center the label
-        text: '↓ 0 B/s ↑ 0 B/s' // Initial text
+        reactive: true, // react to mouse clicks
       });
 
+      this._settings = settings;
       this._previousRxBytes = 0; // Previous received bytes
       this._previousTxBytes = 0; // Previous transmitted bytes
-      this._updateTimer = null; // Timer for periodic updates
 
       // Create a Gio.File instance for asynchronous file operations
       this._netDevFile = Gio.File.new_for_path(PROC_NET_DEV_PATH);
+
+      // listen for clicks
+      this.connect('button-press-event', (actor, event) => {
+        // check if it was a double click
+        if(event.get_click_count() == 2) {
+          const currentVal = this._settings.get_boolean('use_bits');
+          this._settings.set_boolean('use_bits', !currentVal);
+          this._updateSpeed(); // refresh ui
+        }
+        return Clutter.EVENT_PROPAGATE;
+      })
     }
 
     // Method to destroy the indicator and stop updates
@@ -40,14 +52,19 @@ const NetworkSpeedIndicator = GObject.registerClass(
     }
 
     // Method to format the speed value for display
-    _formatSpeedValue(bytes) {
-      const units = ['B/s', 'KB/s', 'MB/s', 'GB/s']; // Units of measurement
-      let unitIndex = 0; // Index for the units array
-      let speed = bytes; // Speed value in bytes
+    _formatSpeedValue(bytesPerSecond) {
+      const useBits = this._settings.get_boolean('use_bits');
 
-      // Convert bytes to higher units if applicable
-      while (speed >= 1024 && unitIndex < units.length - 1) {
-        speed /= 1024;
+      let speed = useBits ? bytesPerSecond * 8 : bytesPerSecond;
+
+      const divider = useBits ? 1000 : 1024;
+      const units = useBits ? ['bps', 'Kbps', 'Mbps', 'Gbps'] : ['B/s', 'KB/s', 'MB/s', 'GB/s']
+
+      let unitIndex = 0; // Index for the units array
+
+      // Convert bytes/bits to higher units if applicable
+      while (speed >= divider && unitIndex < units.length - 1) {
+        speed /= divider;
         unitIndex++;
       }
 
@@ -70,10 +87,12 @@ const NetworkSpeedIndicator = GObject.registerClass(
             const [success, contents] = file.load_contents_finish(result);
             if (!success) throw new Error('Failed to read network stats');
 
+            // decode files binary data to readable text
             const lines = new TextDecoder().decode(contents).split('\n');
             let totalRxBytes = 0;
             let totalTxBytes = 0;
 
+            // skip first 2 lines (headers)
             for (const line of lines.slice(2)) {
               const trimmed = line.trim();
               if (!trimmed) continue;
@@ -157,7 +176,8 @@ const NetworkSpeedIndicator = GObject.registerClass(
 export default class NetworkSpeedExtension extends Extension {
   // Method to enable the extension
   enable() {
-    this._indicator = new NetworkSpeedIndicator(); // Create a new indicator
+    this._settings = this.getSettings();
+    this._indicator = new NetworkSpeedIndicator(this._settings); // Create a new indicator
     Main.panel._rightBox.insert_child_at_index(this._indicator, 0); // Add the indicator to the panel
     this._indicator.startUpdate(); // Start updating the indicator
   }
@@ -167,6 +187,7 @@ export default class NetworkSpeedExtension extends Extension {
     if (this._indicator) {
       this._indicator.destroy(); // Destroy the indicator
       this._indicator = null; // Clear the reference
+      this._settings = null;
     }
   }
 }
