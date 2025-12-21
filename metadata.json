@@ -6,6 +6,6 @@
     "45", "46", "47"
   ],
   "url": "https://github.com/ajxv/netspeed-monitor",
-  "version": 5,
+  "version": 6,
   "settings-schema": "org.gnome.shell.extensions.netspeed-monitor" 
 }
