@@ -5,6 +5,8 @@
 
 This extension shows your current network download and upload speeds in the GNOME top bar. It helps you keep track of your network usage in real time.
 
+![extension in action](screenshots/screenshot1.png)
+
 ## Features
 
 - Shows real-time download (↓) and upload (↑) speeds

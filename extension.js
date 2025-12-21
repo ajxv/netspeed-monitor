@@ -10,8 +10,9 @@ import Gio from 'gi://Gio';
 import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 
-// Constants for the update interval and network interfaces to ignore
+// Constants for update interval, ignored interfaces, and long press duration
 const UPDATE_INTERVAL_SECONDS = 3;
+const LONG_PRESS_DURATION_MS = 1000; // 1 second
 const NETWORK_INTERFACES_TO_IGNORE = ['lo', 'vir', 'vbox', 'docker', 'br-'];
 const PROC_NET_DEV_PATH = '/proc/net/dev';
 
@@ -34,7 +35,7 @@ const NetworkSpeedIndicator = GObject.registerClass(
 
       // Add long-press action to toggle bits/bytes display
       this._clickAction = new Clutter.ClickAction();
-      this._clickAction.long_press_duration = 1000; // 1 second hold
+      this._clickAction.long_press_duration = LONG_PRESS_DURATION_MS;
       this._clickAction.connect('long-press', (action, actor, state) => {
         // Only toggle when long-press is activated
         if (state === Clutter.LongPressState.ACTIVATE) {
