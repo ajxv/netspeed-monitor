@@ -1,0 +1,14 @@
+# Ignore build artifacts and OS files
+*.zip
+*.tar.gz
+*.tar
+*.bak
+*.swp
+.DS_Store
+
+# Ignore compiled schemas
+schemas/gschemas.compiled
+
+# Ignore node/npm files if ever present
+node_modules/
+package-lock.json
