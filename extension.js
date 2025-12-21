@@ -29,14 +29,14 @@ const NetworkSpeedIndicator = GObject.registerClass(
       this._previousRxBytes = 0; // Previous received bytes
       this._previousTxBytes = 0; // Previous transmitted bytes
 
-      // Create a Gio.File instance for asynchronous file operations
+      // Create a Gio.File instance for reading network stats from /proc/net/dev
       this._netDevFile = Gio.File.new_for_path(PROC_NET_DEV_PATH);
 
-      // Use Clutter.ClickAction for long-press (1s) toggling
+      // Add long-press action to toggle bits/bytes display
       this._clickAction = new Clutter.ClickAction();
-      this._clickAction.long_press_duration = 1000;
+      this._clickAction.long_press_duration = 1000; // 1 second hold
       this._clickAction.connect('long-press', (action, actor, state) => {
-        // Only toggle on ACTIVATE (after hold duration)
+        // Only toggle when long-press is activated
         if (state === Clutter.LongPressState.ACTIVATE) {
           const currentVal = this._settings.get_boolean('use-bits');
           this._settings.set_boolean('use-bits', !currentVal);
@@ -48,12 +48,13 @@ const NetworkSpeedIndicator = GObject.registerClass(
     }
 
     destroy() {
-      this.stopUpdate(); // Stop the periodic updates
-      super.destroy(); // Call the parent class destroy method
+      // Clean up periodic updates and remove from UI
+      this.stopUpdate();
+      super.destroy();
     }
 
     _formatSpeedValue(bytesPerSecond) {
-      // Format speed for display, using bits or bytes
+      // Convert speed to human-readable format (bits/bytes, K/M/G units)
       const useBits = this._settings.get_boolean('use-bits');
       let speed = useBits ? bytesPerSecond * 8 : bytesPerSecond;
       const divider = useBits ? 1000 : 1024;
@@ -75,7 +76,7 @@ const NetworkSpeedIndicator = GObject.registerClass(
 
     // Method to read network statistics asynchronously
     async _readNetworkStats() {
-      // Read and sum RX/TX bytes from /proc/net/dev
+      // Read and sum RX/TX bytes from /proc/net/dev for all interfaces except ignored
       return new Promise((resolve, reject) => {
         this._netDevFile.load_contents_async(null, (file, result) => {
           try {
@@ -108,16 +109,15 @@ const NetworkSpeedIndicator = GObject.registerClass(
     }
 
     async _updateSpeed() {
-      // Update the indicator with current network speed
+      // Calculate and update the displayed network speed
       const stats = await this._readNetworkStats();
       if (!stats) return GLib.SOURCE_CONTINUE;
 
       const { totalRxBytes, totalTxBytes } = stats;
-
-      // Initialize previous values if first run
+      // On first run, initialize previous values
       this._previousRxBytes ||= totalRxBytes;
       this._previousTxBytes ||= totalTxBytes;
-      // Calculate speeds
+      // Calculate download/upload speeds
       const downloadSpeed = this._formatSpeedValue(
         (totalRxBytes - this._previousRxBytes) / UPDATE_INTERVAL_SECONDS
       );
