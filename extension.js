@@ -18,11 +18,10 @@ const PROC_NET_DEV_PATH = '/proc/net/dev';
 // Define the NetworkSpeedIndicator class, extending St.Label
 const NetworkSpeedIndicator = GObject.registerClass(
   class NetworkSpeedIndicator extends St.Label {
-    // Constructor to initialize the label and set initial values
     _init(settings) {
       super._init({
-        style_class: 'panel-button', // default panel-button CSS class for styling
-        y_align: Clutter.ActorAlign.CENTER, // Vertically center the label
+        style_class: 'panel-button',
+        y_align: Clutter.ActorAlign.CENTER,
         reactive: true, // react to mouse clicks
       });
 
@@ -35,7 +34,7 @@ const NetworkSpeedIndicator = GObject.registerClass(
 
       // Use Clutter.ClickAction for long-press (1s) toggling
       this._clickAction = new Clutter.ClickAction();
-      this._clickAction.long_press_duration = 1000; // 1000ms = 1 second
+      this._clickAction.long_press_duration = 1000;
       this._clickAction.connect('long-press', (action, actor, state) => {
         // Only toggle on ACTIVATE (after hold duration)
         if (state === Clutter.LongPressState.ACTIVATE) {
@@ -48,30 +47,22 @@ const NetworkSpeedIndicator = GObject.registerClass(
       this.add_action(this._clickAction);
     }
 
-    // Method to destroy the indicator and stop updates
     destroy() {
       this.stopUpdate(); // Stop the periodic updates
       super.destroy(); // Call the parent class destroy method
     }
 
-    // Method to format the speed value for display
     _formatSpeedValue(bytesPerSecond) {
+      // Format speed for display, using bits or bytes
       const useBits = this._settings.get_boolean('use-bits');
-
       let speed = useBits ? bytesPerSecond * 8 : bytesPerSecond;
-
       const divider = useBits ? 1000 : 1024;
-      const units = useBits ? ['bps', 'Kbps', 'Mbps', 'Gbps'] : ['B/s', 'KB/s', 'MB/s', 'GB/s']
-
-      let unitIndex = 0; // Index for the units array
-
-      // Convert bytes/bits to higher units if applicable
+      const units = useBits ? ['bps', 'Kbps', 'Mbps', 'Gbps'] : ['B/s', 'KB/s', 'MB/s', 'GB/s'];
+      let unitIndex = 0;
       while (speed >= divider && unitIndex < units.length - 1) {
         speed /= divider;
         unitIndex++;
       }
-
-      // Return the formatted speed value
       return `${speed.toFixed(1)} ${units[unitIndex]}`;
     }
 
@@ -84,6 +75,7 @@ const NetworkSpeedIndicator = GObject.registerClass(
 
     // Method to read network statistics asynchronously
     async _readNetworkStats() {
+      // Read and sum RX/TX bytes from /proc/net/dev
       return new Promise((resolve, reject) => {
         this._netDevFile.load_contents_async(null, (file, result) => {
           try {
@@ -94,23 +86,18 @@ const NetworkSpeedIndicator = GObject.registerClass(
             const lines = new TextDecoder().decode(contents).split('\n');
             let totalRxBytes = 0;
             let totalTxBytes = 0;
-
-            // skip first 2 lines (headers)
+            // Skip headers, sum RX/TX for all non-ignored interfaces
             for (const line of lines.slice(2)) {
               const trimmed = line.trim();
               if (!trimmed) continue;
-
               const [iface, data] = trimmed.split(':');
               if (!data || this._isIgnoredInterface(iface)) continue;
-
               const [rxBytes, , , , , , , , txBytes] = data.trim()
                 .split(/\s+/)
                 .map(n => parseInt(n, 10));
-
               totalRxBytes += rxBytes;
               totalTxBytes += txBytes;
             }
-
             resolve({ totalRxBytes, totalTxBytes });
           } catch (error) {
             console.error('NetworkSpeed: Error reading stats:', error);
@@ -120,8 +107,8 @@ const NetworkSpeedIndicator = GObject.registerClass(
       });
     }
 
-    // Method to update the network speed display
     async _updateSpeed() {
+      // Update the indicator with current network speed
       const stats = await this._readNetworkStats();
       if (!stats) return GLib.SOURCE_CONTINUE;
 
@@ -130,8 +117,7 @@ const NetworkSpeedIndicator = GObject.registerClass(
       // Initialize previous values if first run
       this._previousRxBytes ||= totalRxBytes;
       this._previousTxBytes ||= totalTxBytes;
-
-      // Calculate current speeds
+      // Calculate speeds
       const downloadSpeed = this._formatSpeedValue(
         (totalRxBytes - this._previousRxBytes) / UPDATE_INTERVAL_SECONDS
       );
