@@ -33,26 +33,18 @@ const NetworkSpeedIndicator = GObject.registerClass(
       // Create a Gio.File instance for asynchronous file operations
       this._netDevFile = Gio.File.new_for_path(PROC_NET_DEV_PATH);
 
-      // Use Clutter.ClickAction for long-press (2s) toggling
+      // Use Clutter.ClickAction for long-press (1s) toggling
       this._clickAction = new Clutter.ClickAction();
-      // 1. Set the duration (Default is usually ~500ms, we change it to 2000ms)
-      this._clickAction.long_press_duration = 1000;
-
-      // 2. Connect to the signal
-      // IMPORTANT: You MUST accept the 'state' argument
+      this._clickAction.long_press_duration = 1000; // 1000ms = 1 second
       this._clickAction.connect('long-press', (action, actor, state) => {
-        // 3. Only run the code if the state is 'ACTIVATE'
-        // 'QUERY' happens at 0ms (start of press)
-        // 'ACTIVATE' happens at 2000ms (timer finished)
-        // 'CANCEL' happens if you move the mouse away
+        // Only toggle on ACTIVATE (after hold duration)
         if (state === Clutter.LongPressState.ACTIVATE) {
-            const currentVal = this._settings.get_boolean('use-bits');
-            this._settings.set_boolean('use-bits', !currentVal);
-            this._updateSpeed(); // Visual refresh
+          const currentVal = this._settings.get_boolean('use-bits');
+          this._settings.set_boolean('use-bits', !currentVal);
+          this._updateSpeed();
         }
         return true;
       });
-
       this.add_action(this._clickAction);
     }
 
