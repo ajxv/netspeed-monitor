@@ -33,16 +33,27 @@ const NetworkSpeedIndicator = GObject.registerClass(
       // Create a Gio.File instance for asynchronous file operations
       this._netDevFile = Gio.File.new_for_path(PROC_NET_DEV_PATH);
 
-      // listen for clicks
-      this.connect('button-press-event', (actor, event) => {
-        // check if it was a double click
-        if(event.get_click_count() == 2) {
-          const currentVal = this._settings.get_boolean('use_bits');
-          this._settings.set_boolean('use_bits', !currentVal);
-          this._updateSpeed(); // refresh ui
+      // Use Clutter.ClickAction for long-press (2s) toggling
+      this._clickAction = new Clutter.ClickAction();
+      // 1. Set the duration (Default is usually ~500ms, we change it to 2000ms)
+      this._clickAction.long_press_duration = 1000;
+
+      // 2. Connect to the signal
+      // IMPORTANT: You MUST accept the 'state' argument
+      this._clickAction.connect('long-press', (action, actor, state) => {
+        // 3. Only run the code if the state is 'ACTIVATE'
+        // 'QUERY' happens at 0ms (start of press)
+        // 'ACTIVATE' happens at 2000ms (timer finished)
+        // 'CANCEL' happens if you move the mouse away
+        if (state === Clutter.LongPressState.ACTIVATE) {
+            const currentVal = this._settings.get_boolean('use-bits');
+            this._settings.set_boolean('use-bits', !currentVal);
+            this._updateSpeed(); // Visual refresh
         }
-        return Clutter.EVENT_PROPAGATE;
-      })
+        return true;
+      });
+
+      this.add_action(this._clickAction);
     }
 
     // Method to destroy the indicator and stop updates
@@ -53,7 +64,7 @@ const NetworkSpeedIndicator = GObject.registerClass(
 
     // Method to format the speed value for display
     _formatSpeedValue(bytesPerSecond) {
-      const useBits = this._settings.get_boolean('use_bits');
+      const useBits = this._settings.get_boolean('use-bits');
 
       let speed = useBits ? bytesPerSecond * 8 : bytesPerSecond;
 

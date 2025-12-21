@@ -1,6 +1,6 @@
 <schemalist>
 	<schema id="org.gnome.shell.extensions.netspeed-monitor" path="/org/gnome/shell/extensions/netspeed-monitor/">
-		<key name="use_bits" type="b">
+		<key name="use-bits" type="b">
 			<default>false</default>
 		</key>
 	</schema>
