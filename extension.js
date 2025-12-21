@@ -177,7 +177,7 @@ export default class NetworkSpeedExtension extends Extension {
     if (this._indicator) {
       this._indicator.destroy(); // Destroy the indicator
       this._indicator = null; // Clear the reference
-      this._settings = null;
     }
+    this._settings = null;
   }
 }
