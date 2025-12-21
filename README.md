@@ -14,7 +14,7 @@ This extension shows your current network download and upload speeds in the GNOM
 - Excludes virtual interfaces (lo, vir, vbox, docker, br-)
 - Toggle between bits and bytes display (long-press the indicator)
 
-## Manual Installation & Try Locally
+## Manual Installation
 
 
 1. Clone this repository:
