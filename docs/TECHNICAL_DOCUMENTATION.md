@@ -20,7 +20,7 @@ graph TD
     Parser -->|Delta Calculation| Calculator["_updateSpeed()"]
     Settings["GSettings (dconf)"] -->|Preference| Formatter["_formatSpeedValue()"]
     Formatter -->|String| UI["St.Label (Top Panel)"]
-    User["User Input"] -->|Long Press| Action["Clutter.ClickAction"]
+    User["User Input"] -->|Long Press| Action["Clutter.LongPressGesture / ClickAction"]
     Action -->|Toggle| Settings
 ```
 
@@ -70,17 +70,15 @@ _init(settings) {
 * **`this._netDevFile`**: We pre-load the `Gio.File` object here so we don't have to re-allocate memory for the file path every 3 seconds.
 
 #### The Interaction Logic (Long Press)
-We use `Clutter.ClickAction` instead of raw events for stability.
+GNOME 50 uses `Clutter.LongPressGesture`; older supported versions fall back to `Clutter.ClickAction`.
 
 ```javascript
-this._clickAction.long_press_duration = 1000; // 1 second
-this._clickAction.connect('long-press', (action, actor, state) => {
-    if (state === Clutter.LongPressState.ACTIVATE) {
-        // Toggle logic here
-    }
+this._clickAction = new Clutter.LongPressGesture({
+    long_press_duration_ms: 1000,
 });
+this._clickAction.connect('recognize', toggleUnits);
 ```
-* **Why `ACTIVATE`?**: The `long-press` signal fires multiple times (Query, Activate, Cancel). Checking for `ACTIVATE` ensures the code runs **exactly once** per interaction.
+* **Why `recognize`?**: It fires once after the configured long-press duration.
 
 #### The Hardware Reader (`_readNetworkStats`)
 This method reads `/proc/net/dev`.
