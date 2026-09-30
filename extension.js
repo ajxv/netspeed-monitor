@@ -13,7 +13,8 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 // Constants for update interval, ignored interfaces, and long press duration
 const UPDATE_INTERVAL_SECONDS = 3;
 const LONG_PRESS_DURATION_MS = 1000; // 1 second
-const NETWORK_INTERFACES_TO_IGNORE = ['lo', 'vir', 'vbox', 'docker', 'veth', 'br-'];
+const NETWORK_INTERFACES_TO_IGNORE = ['vir', 'vbox', 'docker', 'veth', 'br-'];
+const LOOPBACK_INTERFACE = 'lo';
 const PROC_NET_DEV_PATH = '/proc/net/dev';
 
 // Define the NetworkSpeedIndicator class, extending St.Label
@@ -103,9 +104,8 @@ const NetworkSpeedIndicator = GObject.registerClass(
 
     // Method to check if the network interface should be ignored
     _isIgnoredInterface(interfaceName) {
-      return NETWORK_INTERFACES_TO_IGNORE.some(prefix =>
-        interfaceName.startsWith(prefix)
-      );
+      return interfaceName === LOOPBACK_INTERFACE ||
+        NETWORK_INTERFACES_TO_IGNORE.some(prefix => interfaceName.startsWith(prefix));
     }
 
     // Method to read network statistics asynchronously; resolves null on failure
@@ -150,7 +150,14 @@ const NetworkSpeedIndicator = GObject.registerClass(
 
     async _updateSpeed() {
       // Calculate and update the displayed network speed
-      const stats = await this._readNetworkStats();
+      if (this._updating) return; // skip if the previous read is still in flight
+      this._updating = true;
+      let stats;
+      try {
+        stats = await this._readNetworkStats();
+      } finally {
+        this._updating = false;
+      }
       if (!stats || this._cancellable.is_cancelled()) return;
 
       const { totalRxBytes, totalTxBytes } = stats;

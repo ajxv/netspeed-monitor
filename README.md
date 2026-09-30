@@ -11,27 +11,25 @@ This extension shows your current network download and upload speeds in the GNOM
 
 - Shows real-time download (↓) and upload (↑) speeds
 - Supports multiple network interfaces
-- Excludes virtual interfaces (lo, vir, vbox, docker, br-)
+- Excludes virtual interfaces (lo, vir, vbox, docker, veth, br-)
 - Toggle between bits and bytes display (long-press the indicator)
 
 ## Manual Installation
 
-
 1. Clone this repository:
    ```sh
    git clone https://github.com/ajxv/netspeed-monitor.git
+   cd netspeed-monitor
    ```
-2. Copy the folder to your GNOME extensions directory:
+2. Build and install the extension:
    ```sh
-   cp -r netspeed-monitor ~/.local/share/gnome-shell/extensions/netspeed-monitor@ajxv/
+   gnome-extensions pack --force .
+   gnome-extensions install --force netspeed-monitor@ajxv.shell-extension.zip
    ```
-3. Compile the GSettings schema:
-   ```sh
-   glib-compile-schemas ~/.local/share/gnome-shell/extensions/netspeed-monitor@ajxv/schemas/
-   ```
-4. Restart GNOME Shell:
+   `pack` also compiles the GSettings schema. The same zip can be uploaded to extensions.gnome.org.
+3. Restart GNOME Shell:
    - Press `Alt+F2`, type `r`, and press `Enter` (on X11), or log out and log in again.
-5. Enable the extension:
+4. Enable the extension:
    ```sh
    gnome-extensions enable netspeed-monitor@ajxv
    ```
