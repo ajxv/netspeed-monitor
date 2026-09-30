@@ -13,7 +13,7 @@ import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 // Constants for update interval, ignored interfaces, and long press duration
 const UPDATE_INTERVAL_SECONDS = 3;
 const LONG_PRESS_DURATION_MS = 1000; // 1 second
-const NETWORK_INTERFACES_TO_IGNORE = ['lo', 'vir', 'vbox', 'docker', 'br-'];
+const NETWORK_INTERFACES_TO_IGNORE = ['lo', 'vir', 'vbox', 'docker', 'veth', 'br-'];
 const PROC_NET_DEV_PATH = '/proc/net/dev';
 
 // Define the NetworkSpeedIndicator class, extending St.Label
@@ -29,36 +29,61 @@ const NetworkSpeedIndicator = GObject.registerClass(
       this._settings = settings;
       this._previousRxBytes = 0; // Previous received bytes
       this._previousTxBytes = 0; // Previous transmitted bytes
+      this._previousSampleUs = null; // Monotonic time of previous sample
+      this._downloadBps = 0; // Last computed speeds in bytes per second
+      this._uploadBps = 0;
+      this._cancellable = new Gio.Cancellable();
 
       // Create a Gio.File instance for reading network stats from /proc/net/dev
       this._netDevFile = Gio.File.new_for_path(PROC_NET_DEV_PATH);
 
-      // GNOME 50 replaced ClickAction with LongPressGesture.
-      const toggleUnits = () => {
-        const currentVal = this._settings.get_boolean('use-bits');
-        this._settings.set_boolean('use-bits', !currentVal);
-        this._updateSpeed();
-      };
-      if (Clutter.LongPressGesture) {
-        this._clickAction = new Clutter.LongPressGesture({
-          long_press_duration_ms: LONG_PRESS_DURATION_MS,
-        });
-        this._clickAction.connect('recognize', toggleUnits);
-      } else {
-        this._clickAction = new Clutter.ClickAction();
-        this._clickAction.long_press_duration = LONG_PRESS_DURATION_MS;
-        this._clickAction.connect('long-press', (action, actor, state) => {
-          if (state === Clutter.LongPressState.ACTIVATE)
-            toggleUnits();
-          return true;
-        });
+      // Long-press detection via plain press/release events, since
+      // Clutter.ClickAction was removed and LongPressGesture is not on all versions.
+      this._signalIds = [
+        this.connect('button-press-event', () => {
+          this._cancelLongPress();
+          this._longPressTimeout = GLib.timeout_add(
+            GLib.PRIORITY_DEFAULT,
+            LONG_PRESS_DURATION_MS,
+            () => {
+              this._longPressTimeout = null;
+              this._toggleUnits();
+              return GLib.SOURCE_REMOVE;
+            }
+          );
+          return Clutter.EVENT_PROPAGATE;
+        }),
+        this.connect('button-release-event', () => {
+          this._cancelLongPress();
+          return Clutter.EVENT_PROPAGATE;
+        }),
+        this.connect('leave-event', () => {
+          this._cancelLongPress();
+          return Clutter.EVENT_PROPAGATE;
+        }),
+      ];
+    }
+
+    _toggleUnits() {
+      const currentVal = this._settings.get_boolean('use-bits');
+      this._settings.set_boolean('use-bits', !currentVal);
+      this._renderSpeed();
+    }
+
+    _cancelLongPress() {
+      if (this._longPressTimeout) {
+        GLib.source_remove(this._longPressTimeout);
+        this._longPressTimeout = null;
       }
-      this.add_action(this._clickAction);
     }
 
     destroy() {
-      // Clean up periodic updates and remove from UI
+      // Clean up signals, timers and periodic updates, then remove from UI
+      this._signalIds?.forEach(id => this.disconnect(id));
+      this._signalIds = null;
+      this._cancelLongPress();
       this.stopUpdate();
+      this._cancellable.cancel();
       super.destroy();
     }
 
@@ -83,11 +108,11 @@ const NetworkSpeedIndicator = GObject.registerClass(
       );
     }
 
-    // Method to read network statistics asynchronously
-    async _readNetworkStats() {
+    // Method to read network statistics asynchronously; resolves null on failure
+    _readNetworkStats() {
       // Read and sum RX/TX bytes from /proc/net/dev for all interfaces except ignored
-      return new Promise((resolve, reject) => {
-        this._netDevFile.load_contents_async(null, (file, result) => {
+      return new Promise(resolve => {
+        this._netDevFile.load_contents_async(this._cancellable, (file, result) => {
           try {
             const [success, contents] = file.load_contents_finish(result);
             if (!success) throw new Error('Failed to read network stats');
@@ -105,43 +130,48 @@ const NetworkSpeedIndicator = GObject.registerClass(
               const [rxBytes, , , , , , , , txBytes] = data.trim()
                 .split(/\s+/)
                 .map(n => parseInt(n, 10));
+              if (!Number.isFinite(rxBytes) || !Number.isFinite(txBytes)) continue;
               totalRxBytes += rxBytes;
               totalTxBytes += txBytes;
             }
             resolve({ totalRxBytes, totalTxBytes });
           } catch (error) {
-            console.error('NetworkSpeed: Error reading stats:', error);
-            reject(null);
+            if (!error.matches?.(Gio.IOErrorEnum, Gio.IOErrorEnum.CANCELLED))
+              console.error('NetworkSpeed: Error reading stats:', error);
+            resolve(null);
           }
         });
       });
     }
 
+    _renderSpeed() {
+      this.text = `↓ ${this._formatSpeedValue(this._downloadBps)} ↑ ${this._formatSpeedValue(this._uploadBps)}`;
+    }
+
     async _updateSpeed() {
       // Calculate and update the displayed network speed
       const stats = await this._readNetworkStats();
-      if (!stats) return GLib.SOURCE_CONTINUE;
+      if (!stats || this._cancellable.is_cancelled()) return;
 
       const { totalRxBytes, totalTxBytes } = stats;
-      // On first run, initialize previous values
-      this._previousRxBytes ||= totalRxBytes;
-      this._previousTxBytes ||= totalTxBytes;
-      // Calculate download/upload speeds
-      const downloadSpeed = this._formatSpeedValue(
-        (totalRxBytes - this._previousRxBytes) / UPDATE_INTERVAL_SECONDS
-      );
-      const uploadSpeed = this._formatSpeedValue(
-        (totalTxBytes - this._previousTxBytes) / UPDATE_INTERVAL_SECONDS
-      );
+      const nowUs = GLib.get_monotonic_time();
 
-      // Update the display
-      this.text = `↓ ${downloadSpeed} ↑ ${uploadSpeed}`;
+      // On first run there is nothing to compare against yet
+      if (this._previousSampleUs !== null) {
+        const elapsedSeconds = (nowUs - this._previousSampleUs) / 1e6;
+        if (elapsedSeconds > 0) {
+          // Clamp at zero: counters drop when an interface disappears
+          this._downloadBps = Math.max(0, totalRxBytes - this._previousRxBytes) / elapsedSeconds;
+          this._uploadBps = Math.max(0, totalTxBytes - this._previousTxBytes) / elapsedSeconds;
+        }
+      }
 
       // Store current values for next update
       this._previousRxBytes = totalRxBytes;
       this._previousTxBytes = totalTxBytes;
+      this._previousSampleUs = nowUs;
 
-      return GLib.SOURCE_CONTINUE;
+      this._renderSpeed();
     }
 
     // Method to start periodic updates of network speed

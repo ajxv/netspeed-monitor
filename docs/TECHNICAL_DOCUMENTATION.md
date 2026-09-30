@@ -70,15 +70,17 @@ _init(settings) {
 * **`this._netDevFile`**: We pre-load the `Gio.File` object here so we don't have to re-allocate memory for the file path every 3 seconds.
 
 #### The Interaction Logic (Long Press)
-GNOME 50 uses `Clutter.LongPressGesture`; older supported versions fall back to `Clutter.ClickAction`.
+`Clutter.ClickAction` was removed and `Clutter.LongPressGesture` only exists on newer versions, so the long press is detected with plain events: `button-press-event` starts a 1 second timer, and `button-release-event` or `leave-event` cancels it. All signal IDs and the timer are cleaned up in `destroy()`.
 
 ```javascript
-this._clickAction = new Clutter.LongPressGesture({
-    long_press_duration_ms: 1000,
+this.connect('button-press-event', () => {
+    this._longPressTimeout = GLib.timeout_add(GLib.PRIORITY_DEFAULT, LONG_PRESS_DURATION_MS, () => {
+        this._toggleUnits();
+        return GLib.SOURCE_REMOVE;
+    });
+    return Clutter.EVENT_PROPAGATE;
 });
-this._clickAction.connect('recognize', toggleUnits);
 ```
-* **Why `recognize`?**: It fires once after the configured long-press duration.
 
 #### The Hardware Reader (`_readNetworkStats`)
 This method reads `/proc/net/dev`.
