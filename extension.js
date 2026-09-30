@@ -33,18 +33,26 @@ const NetworkSpeedIndicator = GObject.registerClass(
       // Create a Gio.File instance for reading network stats from /proc/net/dev
       this._netDevFile = Gio.File.new_for_path(PROC_NET_DEV_PATH);
 
-      // Add long-press action to toggle bits/bytes display
-      this._clickAction = new Clutter.ClickAction();
-      this._clickAction.long_press_duration = LONG_PRESS_DURATION_MS;
-      this._clickAction.connect('long-press', (action, actor, state) => {
-        // Only toggle when long-press is activated
-        if (state === Clutter.LongPressState.ACTIVATE) {
-          const currentVal = this._settings.get_boolean('use-bits');
-          this._settings.set_boolean('use-bits', !currentVal);
-          this._updateSpeed();
-        }
-        return true;
-      });
+      // GNOME 50 replaced ClickAction with LongPressGesture.
+      const toggleUnits = () => {
+        const currentVal = this._settings.get_boolean('use-bits');
+        this._settings.set_boolean('use-bits', !currentVal);
+        this._updateSpeed();
+      };
+      if (Clutter.LongPressGesture) {
+        this._clickAction = new Clutter.LongPressGesture({
+          long_press_duration_ms: LONG_PRESS_DURATION_MS,
+        });
+        this._clickAction.connect('recognize', toggleUnits);
+      } else {
+        this._clickAction = new Clutter.ClickAction();
+        this._clickAction.long_press_duration = LONG_PRESS_DURATION_MS;
+        this._clickAction.connect('long-press', (action, actor, state) => {
+          if (state === Clutter.LongPressState.ACTIVATE)
+            toggleUnits();
+          return true;
+        });
+      }
       this.add_action(this._clickAction);
     }
 
